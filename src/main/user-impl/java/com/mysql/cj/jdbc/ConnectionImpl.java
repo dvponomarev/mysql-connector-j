@@ -106,6 +106,8 @@ public class ConnectionImpl implements JdbcConnection, SessionEventListener, Ser
 
     private static final long serialVersionUID = 4009476458425101761L;
 
+    private static final boolean ENABLE_AUTOCOMMIT = false;
+
     private static final SQLPermission SET_NETWORK_TIMEOUT_PERM = new SQLPermission("setNetworkTimeout");
 
     private static final SQLPermission ABORT_PERM = new SQLPermission("abort");
@@ -2042,7 +2044,7 @@ public class ConnectionImpl implements JdbcConnection, SessionEventListener, Ser
                 // server so the value holds across connections
                 this.session.getServerSession().setAutoCommit(autoCommitFlag);
 
-                if (needsSetOnServer) {
+                if (needsSetOnServer && ENABLE_AUTOCOMMIT) {
                     this.session.execSQL(null, autoCommitFlag ? "SET autocommit=1" : "SET autocommit=0", -1, null, false, this.nullStatementResultSetFactory,
                             null, false);
                 }
