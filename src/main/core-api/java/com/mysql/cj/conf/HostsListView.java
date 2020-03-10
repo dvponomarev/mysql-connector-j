@@ -27,71 +27,11 @@
  * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
-package com.mysql.cj.protocol;
+package com.mysql.cj.conf;
 
-public class InternalTime {
-
-    private int hours = 0;
-    private int minutes = 0;
-    private int seconds = 0;
-    private int nanos = 0;
-    private int scale = 0;
-
-    /**
-     * Constructs a zero time
-     */
-    public InternalTime() {
-    }
-
-    public InternalTime(int hours, int minutes, int seconds, int nanos, int scale) {
-        this.hours = hours;
-        this.minutes = minutes;
-        this.seconds = seconds;
-        this.nanos = nanos;
-        this.scale = scale;
-    }
-
-    public int getHours() {
-        return this.hours;
-    }
-
-    public void setHours(int hours) {
-        this.hours = hours;
-    }
-
-    public int getMinutes() {
-        return this.minutes;
-    }
-
-    public void setMinutes(int minutes) {
-        this.minutes = minutes;
-    }
-
-    public int getSeconds() {
-        return this.seconds;
-    }
-
-    public void setSeconds(int seconds) {
-        this.seconds = seconds;
-    }
-
-    public int getNanos() {
-        return this.nanos;
-    }
-
-    public void setNanos(int nanos) {
-        this.nanos = nanos;
-    }
-
-    public boolean isZero() {
-        return this.hours == 0 && this.minutes == 0 && this.seconds == 0 && this.nanos == 0;
-    }
-
-    public int getScale() {
-        return this.scale;
-    }
-
-    public void setScale(int scale) {
-        this.scale = scale;
-    }
+/**
+ * An enumeration that identifies the type of the view intended for getting hosts lists for multi-host connections.
+ */
+public enum HostsListView {
+    ALL, MASTERS, SLAVES;
 }

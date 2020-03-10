@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -29,11 +29,16 @@
 
 package com.mysql.cj.xdevapi;
 
+import java.util.List;
 import java.util.Properties;
 
+import com.mysql.cj.Messages;
 import com.mysql.cj.conf.ConnectionUrl;
 import com.mysql.cj.conf.HostInfo;
+import com.mysql.cj.conf.PropertyDefinitions;
+import com.mysql.cj.conf.PropertyKey;
 import com.mysql.cj.exceptions.CJCommunicationsException;
+import com.mysql.cj.exceptions.CJException;
 import com.mysql.cj.exceptions.ExceptionFactory;
 import com.mysql.cj.exceptions.InvalidConnectionAttributeException;
 
@@ -45,6 +50,7 @@ import com.mysql.cj.exceptions.InvalidConnectionAttributeException;
  * 
  * {@link Session} session1 = xFactory.getSession("<b>mysqlx:</b>//[user1[:pwd1]@]host1[:port1]/db");
  * {@link Session} session2 = xFactory.getSession("<b>mysqlx:</b>//host2[:port2]/db?user=user2&amp;password=pwd2");
+ * {@link Session} session3 = xFactory.getSession("<b>mysqlx+srv:</b>//[user1[:pwd1]@]service_name/db");
  * </pre>
  *
  */
@@ -58,7 +64,7 @@ public class SessionFactory {
      */
     protected ConnectionUrl parseUrl(String url) {
         ConnectionUrl connUrl = ConnectionUrl.getConnectionUrlInstance(url, null);
-        if (connUrl == null || connUrl.getType() != ConnectionUrl.Type.XDEVAPI_SESSION) {
+        if (connUrl == null || (connUrl.getType() != ConnectionUrl.Type.XDEVAPI_SESSION && connUrl.getType() != ConnectionUrl.Type.XDEVAPI_DNS_SRV_SESSION)) {
             throw ExceptionFactory.createException(InvalidConnectionAttributeException.class, "Initialization via URL failed for \"" + url + "\"");
         }
         return connUrl;
@@ -72,16 +78,20 @@ public class SessionFactory {
      * @return a {@link Session} instance.
      */
     protected Session getSession(ConnectionUrl connUrl) {
-        CJCommunicationsException latestException = null;
-        for (HostInfo hi : connUrl.getHostsList()) {
+        CJException latestException = null;
+        List<HostInfo> hostsList = connUrl.getHostsList();
+        for (HostInfo hi : hostsList) {
             try {
                 return new SessionImpl(hi);
             } catch (CJCommunicationsException e) {
+                if (e.getCause() == null) {
+                    throw e;
+                }
                 latestException = e;
             }
         }
         if (latestException != null) {
-            throw latestException;
+            throw ExceptionFactory.createException(CJCommunicationsException.class, Messages.getString("Session.Create.Failover.0"), latestException);
         }
         return null;
     }
@@ -105,8 +115,15 @@ public class SessionFactory {
      * @return a {@link Session} instance.
      */
     public Session getSession(Properties properties) {
-        ConnectionUrl connUrl = ConnectionUrl.getConnectionUrlInstance(ConnectionUrl.Type.XDEVAPI_SESSION.getScheme(), properties);
 
+        if (properties.containsKey(PropertyKey.xdevapiDnsSrv.getKeyName()) && (Boolean) PropertyDefinitions.getPropertyDefinition(PropertyKey.xdevapiDnsSrv)
+                .parseObject(properties.getProperty(PropertyKey.xdevapiDnsSrv.getKeyName()), null)) {
+
+            ConnectionUrl connUrl = ConnectionUrl.getConnectionUrlInstance(ConnectionUrl.Type.XDEVAPI_DNS_SRV_SESSION.getScheme(), properties);
+            return getSession(connUrl);
+        }
+
+        ConnectionUrl connUrl = ConnectionUrl.getConnectionUrlInstance(ConnectionUrl.Type.XDEVAPI_SESSION.getScheme(), properties);
         return new SessionImpl(connUrl.getMainHost());
     }
 }

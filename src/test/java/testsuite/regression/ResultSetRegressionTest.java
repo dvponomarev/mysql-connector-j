@@ -104,6 +104,7 @@ import com.mysql.cj.log.Log;
 import com.mysql.cj.protocol.InternalDate;
 import com.mysql.cj.protocol.a.result.NativeResultset;
 import com.mysql.cj.protocol.a.result.ResultsetRowsCursor;
+import com.mysql.cj.protocol.a.result.ResultsetRowsStreaming;
 import com.mysql.cj.result.SqlDateValueFactory;
 import com.mysql.cj.util.TimeUtil;
 import com.mysql.cj.util.Util;
@@ -5832,9 +5833,9 @@ public class ResultSetRegressionTest extends BaseTestCase {
         this.rs = this.stmt.executeQuery("select Started from testBug82707");
         int id = 0;
         while (this.rs.next()) {
-            String expected = ts.get(id++) + "000";
-            if (expected.endsWith(".000000000")) {
-                expected = expected.replace(".000000000", "");
+            String expected = ts.get(id++);
+            if (expected.endsWith(".000000")) {
+                expected = expected.replace(".000000", "");
             }
             assertEquals(expected, this.rs.getString("Started"));
         }
@@ -6239,12 +6240,12 @@ public class ResultSetRegressionTest extends BaseTestCase {
             assertEquals("2019-12-30 13:59:57.0", this.rs.getTimestamp(3).toString());
             // TODO this.rs.getString(3) here doesn't take into account the serverTimezone thus returns the value as it is stored in table; is it a bug?
             // assertEquals("2019-12-30 13:59:57", this.rs.getString(3));
-            assertEquals("2015-12-31 23:59:59.456000000", this.rs.getString(4));
+            assertEquals("2015-12-31 23:59:59.456", this.rs.getString(4));
             assertTrue(this.rs.next());
             assertEquals(1, this.rs.getInt(1));
             assertEquals(200, this.rs.getInt(2));
             assertEquals("2014-12-31 23:59:59", this.rs.getString(3)); // we didn't change this date, so getString() matches the getTimestamp()
-            assertEquals("2022-12-31 23:59:59.456000000", this.rs.getString(4));
+            assertEquals("2022-12-31 23:59:59.456", this.rs.getString(4));
         }
 
         /* Unified test */
@@ -7145,4 +7146,94 @@ public class ResultSetRegressionTest extends BaseTestCase {
         }
     }
 
+    /**
+     * Tests fix for Bug#96059 (29999318), ERROR STREAMING MULTI RESULTSETS WITH MYSQL-CONNECTOR-JAVA 8.0.X.
+     *
+     * @throws Exception
+     *             if the test fails.
+     */
+    public void testBug96059() throws Exception {
+        createTable("testBug96059", "(f1 int, f2 int, f3 int)");
+        this.stmt.executeUpdate("INSERT INTO `testBug96059` VALUES (1,2,3),(4,5,6)");
+
+        Connection con = null;
+        Properties props = new Properties();
+        props.setProperty(PropertyKey.allowMultiQueries.getKeyName(), "true");
+
+        for (boolean useSSPS : new boolean[] { false, true }) {
+            props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "" + useSSPS);
+            try {
+
+                con = getConnectionWithProps(props);
+
+                PreparedStatement st = con.prepareStatement("SELECT f1 from testBug96059;SELECT f2 from testBug96059;SELECT f3 from testBug96059;",
+                        ResultSet.TYPE_FORWARD_ONLY, ResultSet.CONCUR_READ_ONLY);
+                st.setFetchSize(Integer.MIN_VALUE);
+                st.setFetchDirection(ResultSet.FETCH_REVERSE);
+                assertTrue(st.execute());
+
+                // fetch results partially then try next result set
+                this.rs = st.getResultSet();
+                assertTrue(((ResultSetImpl) this.rs).getRows() instanceof ResultsetRowsStreaming<?>);
+                assertTrue(this.rs.next());
+                assertEquals(1, this.rs.getInt(1));
+                assertTrue(st.getMoreResults());
+
+                // fetch results fully then try next result set
+                this.rs = st.getResultSet();
+                assertTrue(((ResultSetImpl) this.rs).getRows() instanceof ResultsetRowsStreaming<?>);
+                assertTrue(this.rs.next());
+                assertEquals(2, this.rs.getInt(1));
+                assertTrue(this.rs.next());
+                assertEquals(5, this.rs.getInt(1));
+                assertFalse(this.rs.next());
+                assertTrue(st.getMoreResults());
+
+                // fetch results partially then try next result set
+                this.rs = st.getResultSet();
+                assertTrue(((ResultSetImpl) this.rs).getRows() instanceof ResultsetRowsStreaming<?>);
+                assertTrue(this.rs.next());
+                assertEquals(3, this.rs.getInt(1));
+                assertFalse(st.getMoreResults());
+
+            } finally {
+                if (con != null) {
+                    con.close();
+                }
+            }
+        }
+    }
+
+    /**
+     * Tests fix for Bug#96383 (30119545) RS.GETTIMESTAMP() HAS DIFFERENT RESULTS FOR TIME FIELDS WITH USECURSORFETCH=TRUE.
+     */
+    public void testBug96383() throws Exception {
+        boolean withFract = versionMeetsMinimum(5, 6, 4); // fractional seconds are not supported in previous versions
+
+        createTable("testBug96383", withFract ? "(id VARCHAR(10), x_time TIME(6))" : "(id VARCHAR(10), x_time TIME)");
+        this.stmt.execute("INSERT INTO testBug96383 values ('time', '00:00:05.123')");
+
+        Properties props = new Properties();
+        for (boolean useSSPS : new boolean[] { false, true }) {
+            for (boolean useCursorFetch : new boolean[] { false, true }) {
+                props.setProperty(PropertyKey.useServerPrepStmts.getKeyName(), "" + useSSPS);
+                props.setProperty(PropertyKey.useCursorFetch.getKeyName(), "" + useCursorFetch);
+                props.setProperty(PropertyKey.defaultFetchSize.getKeyName(), useCursorFetch ? "1" : "0");
+
+                Connection con = getConnectionWithProps(props);
+
+                Statement st = con.createStatement();
+                this.rs = st.executeQuery("SELECT * FROM testBug96383 WHERE id='time'");
+                assertTrue(this.rs.next());
+                assertEquals(withFract ? "1970-01-01 00:00:05.123" : "1970-01-01 00:00:05.0", this.rs.getTimestamp(2).toString());
+
+                this.pstmt = con.prepareStatement("SELECT * FROM testBug96383 WHERE id='time'");
+                this.rs = this.pstmt.executeQuery();
+                assertTrue(this.rs.next());
+                assertEquals(withFract ? "1970-01-01 00:00:05.123" : "1970-01-01 00:00:05.0", this.rs.getTimestamp(2).toString());
+
+                con.close();
+            }
+        }
+    }
 }

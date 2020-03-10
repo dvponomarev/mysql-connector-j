@@ -49,19 +49,69 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.NoSuchElementException;
 import java.util.Properties;
+import java.util.concurrent.Callable;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 import com.mysql.cj.conf.ConnectionPropertiesTransform;
 import com.mysql.cj.conf.ConnectionUrl;
 import com.mysql.cj.conf.ConnectionUrlParser;
 import com.mysql.cj.conf.HostInfo;
+import com.mysql.cj.conf.HostsListView;
 import com.mysql.cj.conf.PropertyDefinitions.ZeroDatetimeBehavior;
 import com.mysql.cj.conf.PropertyKey;
+import com.mysql.cj.conf.url.FailoverConnectionUrl;
+import com.mysql.cj.conf.url.FailoverDnsSrvConnectionUrl;
+import com.mysql.cj.conf.url.LoadBalanceConnectionUrl;
+import com.mysql.cj.conf.url.LoadBalanceDnsSrvConnectionUrl;
+import com.mysql.cj.conf.url.ReplicationConnectionUrl;
+import com.mysql.cj.conf.url.ReplicationDnsSrvConnectionUrl;
+import com.mysql.cj.conf.url.SingleConnectionUrl;
+import com.mysql.cj.conf.url.XDevApiConnectionUrl;
+import com.mysql.cj.conf.url.XDevApiDnsSrvConnectionUrl;
+import com.mysql.cj.exceptions.CJException;
+import com.mysql.cj.exceptions.InvalidConnectionAttributeException;
 import com.mysql.cj.exceptions.WrongArgumentException;
 
 public class ConnectionUrlTest {
+    protected static <EX extends Throwable> EX assertThrows(Class<EX> throwable, Callable<?> testRoutine) {
+        return assertThrows("", throwable, null, testRoutine);
+    }
+
+    protected static <EX extends Throwable> EX assertThrows(String message, Class<EX> throwable, Callable<?> testRoutine) {
+        return assertThrows(message, throwable, null, testRoutine);
+    }
+
+    protected static <EX extends Throwable> EX assertThrows(Class<EX> throwable, String msgMatchesRegex, Callable<?> testRoutine) {
+        return assertThrows("", throwable, msgMatchesRegex, testRoutine);
+    }
+
+    protected static <EX extends Throwable> EX assertThrows(String message, Class<EX> throwable, String msgMatchesRegex, Callable<?> testRoutine) {
+        if (message.length() > 0) {
+            message += " ";
+        }
+        try {
+            testRoutine.call();
+        } catch (Throwable t) {
+            if (!throwable.isAssignableFrom(t.getClass())) {
+                fail(message + "expected exception of type '" + throwable.getName() + "' but instead a exception of type '" + t.getClass().getName()
+                        + "' was thrown.");
+            }
+
+            if (msgMatchesRegex != null && !t.getMessage().matches(msgMatchesRegex)) {
+                fail(message + "the error message «" + t.getMessage() + "» was expected to match «" + msgMatchesRegex + "».");
+            }
+
+            return throwable.cast(t);
+        }
+        fail(message + "expected exception of type '" + throwable.getName() + "'.");
+
+        // never reaches here
+        return null;
+    }
+
     /**
      * Internal class for generating hundreds of thousands of connection strings.
      */
@@ -423,6 +473,7 @@ public class ConnectionUrlTest {
      */
     @Test
     public void testTypeEnumCorrectValues() {
+        // Standard schemes:
         assertEquals(ConnectionUrl.Type.SINGLE_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql:", 1));
         assertEquals(ConnectionUrl.Type.FAILOVER_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql:", 2));
         assertEquals(ConnectionUrl.Type.FAILOVER_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql:", 3));
@@ -431,15 +482,12 @@ public class ConnectionUrlTest {
         assertEquals(ConnectionUrl.Type.REPLICATION_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql:replication:", 1));
         assertEquals(ConnectionUrl.Type.REPLICATION_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql:replication:", 2));
         assertEquals(ConnectionUrl.Type.XDEVAPI_SESSION, ConnectionUrl.Type.fromValue("mysqlx:", 1));
-    }
-
-    /**
-     * Checks the expected exception from an incorrect usage of {@link ConnectionUrl.Type#fromValue(String, int)}.
-     */
-    @Ignore // No longer applies.
-    @Test(expected = WrongArgumentException.class)
-    public void testTypeEnumWrongMysqlxValue() {
-        ConnectionUrl.Type.fromValue("mysqlx:", 2);
+        // DNS SRV schemes:
+        assertEquals(ConnectionUrl.Type.FAILOVER_DNS_SRV_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql+srv:", 1));
+        assertEquals(ConnectionUrl.Type.LOADBALANCE_DNS_SRV_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql+srv:loadbalance:", 1));
+        assertEquals(ConnectionUrl.Type.REPLICATION_DNS_SRV_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql+srv:replication:", 1));
+        assertEquals(ConnectionUrl.Type.REPLICATION_DNS_SRV_CONNECTION, ConnectionUrl.Type.fromValue("jdbc:mysql+srv:replication:", 2));
+        assertEquals(ConnectionUrl.Type.XDEVAPI_DNS_SRV_SESSION, ConnectionUrl.Type.fromValue("mysqlx+srv:", 1));
     }
 
     /**
@@ -561,6 +609,30 @@ public class ConnectionUrlTest {
         assertFalse(ConnectionUrl.acceptsUrl("jdbc:mysql:unknown://somehost:1234/db?key=value"));
         assertFalse(ConnectionUrl.acceptsUrl("mysql-x:"));
         assertFalse(ConnectionUrl.acceptsUrl("mysql-x://somehost:1234/db?key=value"));
+
+        // Supported DNS-SRV variants:
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv:"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv://somehost:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl(
+                "jdbc:mysql+srv://verylonghostname01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv://127.0.0.1:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv:loadbalance:"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv:loadbalance://somehost:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl(
+                "jdbc:mysql:loadbalance://verylonghostname01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv:replication:"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv:replication://somehost:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl(
+                "jdbc:mysql+srv:replication://verylonghostname01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("jdbc:mysql+srv:"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://somehost:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://127.0.0.1:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://[::1]:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://[fe80::250:56ff:fec0:8]:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://johndoe:secret@[::1]:1234/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://johndoe:secret@[[::1]:1234]/db?key=value"));
+        assertTrue(ConnectionUrl.acceptsUrl("mysqlx+srv://johndoe:secret@[[::1]:1234,(address=[abcd:1000::f09a]:4321,priority=100)]/db?key=value"));
+
     }
 
     /**
@@ -947,7 +1019,8 @@ public class ConnectionUrlTest {
         int hostIdx;
 
         String[] hostNames = new String[] { "host",
-                "verylonghostname01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" };
+                "verylonghostname0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789"
+                        + "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789" };
 
         for (String hostName : hostNames) {
             // Hosts sub list with "address" splitting (host3:3333) and priority value.
@@ -966,20 +1039,24 @@ public class ConnectionUrlTest {
                 hostIdx++;
             }
 
-            // Hosts sub list with "address" splitting (host3:3333) and without priority value.
+            // Hosts sub list with "address" splitting (host3:3333) and without priority value (randomly sorted).
             connUrl = ConnectionUrl.getConnectionUrlInstance("mysqlx://johndoe:secret@[" + hostName + "1:1111,address=(host=" + hostName + "2)(port=2222),"
                     + "(address=" + hostName + "3:3333)]/db?address=host4:4444", null);
+            String hosts = IntStream.range(1, 4).mapToObj(i -> hostName + i).collect(Collectors.joining("|"));
+            String ports = IntStream.range(1, 4).mapToObj(i -> 1111 * i).map(i -> i.toString()).collect(Collectors.joining("|"));
             hostIdx = 1;
             for (HostInfo hi : connUrl.getHostsList()) {
                 String testCase = "Host " + hostIdx + ":";
                 assertEquals(testCase, "johndoe", hi.getUser());
                 assertEquals(testCase, "secret", hi.getPassword());
-                assertEquals(testCase, hostName + hostIdx, hi.getHost());
-                assertEquals(testCase, 1111 * hostIdx, hi.getPort());
+                hosts = hosts.replace(hi.getHost(), "");
+                ports = ports.replace(Integer.toString(hi.getPort()), "");
                 assertEquals(testCase, "db", hi.getDatabase());
                 assertFalse(testCase, hi.getHostProperties().containsKey(PropertyKey.PRIORITY.getKeyName()));
                 hostIdx++;
             }
+            assertEquals("||", hosts);
+            assertEquals("||", ports);
 
             // Hosts list with "address" splitting (host3:3333) and priority value.
             connUrl = ConnectionUrl.getConnectionUrlInstance("mysqlx://johndoe:secret@" + hostName + "1:1111,johndoe:secret@address=(host=" + hostName
@@ -997,20 +1074,24 @@ public class ConnectionUrlTest {
                 hostIdx++;
             }
 
-            // Hosts list with "address" splitting (host3:3333) and without priority value.
+            // Hosts list with "address" splitting (host3:3333) and without priority value (randomly sorted).
             connUrl = ConnectionUrl.getConnectionUrlInstance("mysqlx://johndoe:secret@" + hostName + "1:1111,johndoe:secret@address=(host=" + hostName
                     + "2)(port=2222)," + "johndoe:secret@(address=" + hostName + "3:3333)/db?address=host4:4444", null);
+            hosts = IntStream.range(1, 4).mapToObj(i -> hostName + i).collect(Collectors.joining("|"));
+            ports = IntStream.range(1, 4).mapToObj(i -> 1111 * i).map(i -> i.toString()).collect(Collectors.joining("|"));
             hostIdx = 1;
             for (HostInfo hi : connUrl.getHostsList()) {
                 String testCase = "Host " + hostIdx + ":";
                 assertEquals(testCase, "johndoe", hi.getUser());
                 assertEquals(testCase, "secret", hi.getPassword());
-                assertEquals(testCase, hostName + hostIdx, hi.getHost());
-                assertEquals(testCase, 1111 * hostIdx, hi.getPort());
+                hosts = hosts.replace(hi.getHost(), "");
+                ports = ports.replace(Integer.toString(hi.getPort()), "");
                 assertEquals(testCase, "db", hi.getDatabase());
                 assertFalse(testCase, hi.getHostProperties().containsKey(PropertyKey.PRIORITY.getKeyName()));
                 hostIdx++;
             }
+            assertEquals("||", hosts);
+            assertEquals("||", ports);
 
             List<String> connStr;
 
@@ -1073,27 +1154,44 @@ public class ConnectionUrlTest {
                 }
             }
 
-            // Sorting hosts by default priority.
+            // Sorting hosts by default priority (random).
             connUrl = ConnectionUrl.getConnectionUrlInstance(
                     "mysqlx://johndoe:secret@[" + hostName + "2," + hostName + "3," + hostName + "1," + hostName + "5," + hostName + "4]/db", null);
-            assertEquals(hostName + "2", connUrl.getMainHost().getHost());
-            assertEquals(hostName + "2", connUrl.getHostsList().get(0).getHost());
-            assertEquals(hostName + "3", connUrl.getHostsList().get(1).getHost());
-            assertEquals(hostName + "1", connUrl.getHostsList().get(2).getHost());
-            assertEquals(hostName + "5", connUrl.getHostsList().get(3).getHost());
-            assertEquals(hostName + "4", connUrl.getHostsList().get(4).getHost());
+            List<HostInfo> hostsList = connUrl.getHostsList();
+            assertEquals(connUrl.getMainHost().getHost(), hostsList.get(0).getHost());
+            hosts = IntStream.range(1, 6).mapToObj(i -> hostName + i).collect(Collectors.joining("|"));
+            for (HostInfo hi : connUrl.getHostsList()) {
+                hosts = hosts.replace(hi.getHost(), "");
+            }
+            assertEquals("||||", hosts);
 
             // Sorting hosts by defined priority.
             connUrl = ConnectionUrl.getConnectionUrlInstance(
                     "mysqlx://johndoe:secret@[(address=" + hostName + "1,priority=50),(address=" + hostName + "2,priority=100),(address=" + hostName
                             + "3,priority=75)," + "(address=" + hostName + "4,priority=0),(address=" + hostName + "5,priority=25)]/db",
                     null);
+            hostsList = connUrl.getHostsList();
             assertEquals(hostName + "2", connUrl.getMainHost().getHost());
-            assertEquals(hostName + "2", connUrl.getHostsList().get(0).getHost());
-            assertEquals(hostName + "3", connUrl.getHostsList().get(1).getHost());
-            assertEquals(hostName + "1", connUrl.getHostsList().get(2).getHost());
-            assertEquals(hostName + "5", connUrl.getHostsList().get(3).getHost());
-            assertEquals(hostName + "4", connUrl.getHostsList().get(4).getHost());
+            assertEquals(hostName + "2", hostsList.get(0).getHost());
+            assertEquals(hostName + "3", hostsList.get(1).getHost());
+            assertEquals(hostName + "1", hostsList.get(2).getHost());
+            assertEquals(hostName + "5", hostsList.get(3).getHost());
+            assertEquals(hostName + "4", hostsList.get(4).getHost());
+
+            // Sorting hosts by defined priority, with duplicates.
+            connUrl = ConnectionUrl.getConnectionUrlInstance("mysqlx://johndoe:secret@[(address=" + hostName + "1,priority=50),(address=" + hostName
+                    + "2,priority=100),(address=" + hostName + "3,priority=10)," + "(address=" + hostName + "4,priority=50),(address=" + hostName
+                    + "5,priority=50),(address=" + hostName + "6,priority=75)]/db", null);
+            hostsList = connUrl.getHostsList();
+            assertEquals(hostName + "2", connUrl.getMainHost().getHost());
+            assertEquals(hostName + "2", hostsList.get(0).getHost());
+            assertEquals(hostName + "6", hostsList.get(1).getHost());
+            hosts = IntStream.of(1, 4, 5).mapToObj(i -> hostName + i).collect(Collectors.joining("|"));
+            hosts = hosts.replace(hostsList.get(2).getHost(), "");
+            hosts = hosts.replace(hostsList.get(3).getHost(), "");
+            hosts = hosts.replace(hostsList.get(4).getHost(), "");
+            assertEquals("||", hosts);
+            assertEquals(hostName + "3", hostsList.get(5).getHost());
         }
     }
 
@@ -1115,6 +1213,389 @@ public class ConnectionUrlTest {
             ConnectionUrl connUrl = ConnectionUrl.getConnectionUrlInstance(cs, props);
             assertEquals(ZeroDatetimeBehavior.CONVERT_TO_NULL.name(), connUrl.getMainHost().getProperty(PropertyKey.zeroDateTimeBehavior.getKeyName()));
         }
+    }
+
+    /**
+     * Tests jdbc:mysql+srv: connection strings.
+     */
+    @Test
+    public void testMysqlFailoverDnsSrvConnectionUrl() {
+        Properties props;
+        props = new Properties();
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "true");
+
+        // Host missing.
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:", null));
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:", props));
+
+        // More than one host.
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname1,hostname2", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname1,hostname2?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname1,hostname2", props));
+
+        // Port specified.
+        props.setProperty(PropertyKey.PORT.getKeyName(), "12345");
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname:12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=true&port=12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname", props));
+        props.remove(PropertyKey.PORT.getKeyName());
+
+        // Conflicting options.
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "false");
+        assertThrows(InvalidConnectionAttributeException.class, "'dnsSrv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname?dnsSrv=false", null));
+        assertThrows(InvalidConnectionAttributeException.class, "'dnsSrv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname", props));
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "true");
+
+        // Setting protocol=PIPE not allowed.
+        props.setProperty(PropertyKey.PROTOCOL.getKeyName(), "pipe");
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname?protocol=pipe", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=true&protocol=pipe", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname", props));
+        props.remove(PropertyKey.PROTOCOL.getKeyName());
+
+        // Resolving hosts fails.
+        assertThrows(CJException.class, "Unable to locate any hosts for hostname\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname", null).getHostsList());
+
+        // Correct ConnectionUrl instances - jdbc:mysql+srv:.
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname", null).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname?dnsSrv=true", null).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname?dnsSrv=true", props).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv://hostname?dnsSrv=false", props).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=true", null).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname", props).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=true", props).getClass());
+        assertEquals(FailoverDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=false", props).getClass());
+
+        // Correct ConnectionUrl instances - jdbc:mysql:.
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "false");
+        assertEquals(SingleConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=false", null).getClass());
+        assertEquals(SingleConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname", props).getClass());
+        assertEquals(SingleConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsArv=false", props).getClass());
+        assertEquals(SingleConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname?dnsSrv=true", props).getClass());
+        assertEquals(FailoverConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname1,hostname2?dnsSrv=false", null).getClass());
+        assertEquals(FailoverConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname1,hostname2", props).getClass());
+        assertEquals(FailoverConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname1,hostname2?dnsArv=false", props).getClass());
+        assertEquals(FailoverConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql://hostname1,hostname2?dnsSrv=true", props).getClass());
+    }
+
+    /**
+     * Tests jdbc:mysql+srv:loadbalance: connection strings.
+     */
+    @Test
+    public void testMysqlLoadBalanceDnsSrvConnectionUrl() {
+        Properties props;
+        props = new Properties();
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "true");
+
+        // Host missing.
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance:", null));
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance:?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance:", props));
+
+        // More than one host.
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname1,hostname2", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname1,hostname2?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname1,hostname2", props));
+
+        // Port specified.
+        props.setProperty(PropertyKey.PORT.getKeyName(), "12345");
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname:12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=true&port=12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname", props));
+        props.remove(PropertyKey.PORT.getKeyName());
+
+        // Conflicting options.
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "false");
+        assertThrows(InvalidConnectionAttributeException.class, "'dnsSrv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname?dnsSrv=false", null));
+        assertThrows(InvalidConnectionAttributeException.class, "'dnsSrv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname", props));
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "true");
+
+        // Setting protocol=PIPE not allowed.
+        props.setProperty(PropertyKey.PROTOCOL.getKeyName(), "pipe");
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname?protocol=pipe", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=true&protocol=pipe", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname", props));
+        props.remove(PropertyKey.PROTOCOL.getKeyName());
+
+        // Setting loadBalanceConnectionGroup not allowed.
+        props.setProperty(PropertyKey.loadBalanceConnectionGroup.getKeyName(), "lbgrp");
+        assertThrows(InvalidConnectionAttributeException.class,
+                "The option 'loadBalanceConnectionGroup' cannot be set\\. Live management of connections is not supported with DNS SRV lookup\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname?loadBalanceConnectionGroup=lbgrp", null));
+        assertThrows(InvalidConnectionAttributeException.class,
+                "The option 'loadBalanceConnectionGroup' cannot be set\\. Live management of connections is not supported with DNS SRV lookup\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=true&loadBalanceConnectionGroup=lbgrp", null));
+        assertThrows(InvalidConnectionAttributeException.class,
+                "The option 'loadBalanceConnectionGroup' cannot be set\\. Live management of connections is not supported with DNS SRV lookup\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname", props));
+        props.remove(PropertyKey.loadBalanceConnectionGroup.getKeyName());
+
+        // Resolving hosts fails.
+        assertThrows(CJException.class, "Unable to locate any hosts for hostname\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname", null).getHostsList());
+
+        // Correct ConnectionUrl instances - jdbc:mysql+srv:loadbalance:.
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname", null).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname?dnsSrv=true", null).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname?dnsSrv=true", props).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:loadbalance://hostname?dnsSrv=false", props).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=true", null).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname", props).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=true", props).getClass());
+        assertEquals(LoadBalanceDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=false", props).getClass());
+
+        // Correct ConnectionUrl instances - jdbc:mysql:loadbalance:.
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "false");
+        assertEquals(LoadBalanceConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=false", null).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname", props).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsArv=false", props).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname?dnsSrv=true", props).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname1,hostname2?dnsSrv=false", null).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname1,hostname2", props).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname1,hostname2?dnsArv=false", props).getClass());
+        assertEquals(LoadBalanceConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:loadbalance://hostname1,hostname2?dnsSrv=true", props).getClass());
+    }
+
+    /**
+     * Tests jdbc:mysql+srv:replication: connection strings.
+     */
+    @Test
+    public void testMysqlLoadReplicationDnsSrvConnectionUrl() {
+        Properties props;
+        props = new Properties();
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "true");
+
+        // Hosts missing.
+        assertThrows(InvalidConnectionAttributeException.class,
+                "Exactly two host names of different types are required for DNS SRV lookup enabled replication connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication:", null));
+        assertThrows(InvalidConnectionAttributeException.class,
+                "Exactly two host names of different types are required for DNS SRV lookup enabled replication connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication:?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class,
+                "Exactly two host names of different types are required for DNS SRV lookup enabled replication connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication:", props));
+
+        // More than one host of the same type.
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2,hostname3", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2,hostname3?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2,hostname3", props));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance(
+                        "jdbc:mysql+srv:replication://(host=hostname1,type=master),(host=hostname2,type=master),(host=hostname3,type=slave)", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance(
+                        "jdbc:mysql:replication://(host=hostname1,type=master),(host=hostname2,type=master),(host=hostname3,type=slave)?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance(
+                        "jdbc:mysql:replication://(host=hostname1,type=master),(host=hostname2,type=master),(host=hostname3,type=slave)", props));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance(
+                        "jdbc:mysql+srv:replication://(host=hostname1,type=master),(host=hostname2,type=slave),(host=hostname3,type=slave)", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance(
+                        "jdbc:mysql:replication://(host=hostname1,type=master),(host=hostname2,type=slave),(host=hostname3,type=slave)?dnsSrv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names for the same type with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance(
+                        "jdbc:mysql:replication://(host=hostname1,type=master),(host=hostname2,type=slave),(host=hostname3,type=slave)", props));
+
+        // Port specified.
+        props.setProperty(PropertyKey.PORT.getKeyName(), "12345");
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1:12345,hostname2", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2:12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=true&port=12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2", props));
+        props.remove(PropertyKey.PORT.getKeyName());
+
+        // Conflicting options.
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "false");
+        assertThrows(InvalidConnectionAttributeException.class, "'dnsSrv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2?dnsSrv=false", null));
+        assertThrows(InvalidConnectionAttributeException.class, "'dnsSrv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2", props));
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "true");
+
+        // Setting protocol=PIPE not allowed.
+        props.setProperty(PropertyKey.PROTOCOL.getKeyName(), "pipe");
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2?protocol=pipe", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=true&protocol=pipe", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Using named pipes with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2", props));
+        props.remove(PropertyKey.PROTOCOL.getKeyName());
+
+        // Setting replicationConnectionGroup not allowed.
+        props.setProperty(PropertyKey.replicationConnectionGroup.getKeyName(), "lbgrp");
+        assertThrows(InvalidConnectionAttributeException.class,
+                "The option 'replicationConnectionGroup' cannot be set\\. Live management of connections is not supported with DNS SRV lookup\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2?replicationConnectionGroup=lbgrp", null));
+        assertThrows(InvalidConnectionAttributeException.class,
+                "The option 'replicationConnectionGroup' cannot be set\\. Live management of connections is not supported with DNS SRV lookup\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=true&replicationConnectionGroup=lbgrp",
+                        null));
+        assertThrows(InvalidConnectionAttributeException.class,
+                "The option 'replicationConnectionGroup' cannot be set\\. Live management of connections is not supported with DNS SRV lookup\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2", props));
+        props.remove(PropertyKey.replicationConnectionGroup.getKeyName());
+
+        // Resolving hosts fails.
+        assertThrows(CJException.class, "Unable to locate any hosts for hostname1\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2", null).getHostsList(HostsListView.MASTERS));
+        assertThrows(CJException.class, "Unable to locate any hosts for hostname2\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2", null).getHostsList(HostsListView.SLAVES));
+
+        // Correct ConnectionUrl instances - jdbc:mysql+srv:replication:.
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2", null).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2?dnsSrv=true", null).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2?dnsSrv=true", props).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql+srv:replication://hostname1,hostname2?dnsSrv=false", props).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=true", null).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2", props).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=true", props).getClass());
+        assertEquals(ReplicationDnsSrvConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=false", props).getClass());
+
+        // Correct ConnectionUrl instances - jdbc:mysql:replication:.
+        props.setProperty(PropertyKey.dnsSrv.getKeyName(), "false");
+        assertEquals(ReplicationConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=false", null).getClass());
+        assertEquals(ReplicationConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2", props).getClass());
+        assertEquals(ReplicationConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsArv=false", props).getClass());
+        assertEquals(ReplicationConnectionUrl.class,
+                ConnectionUrl.getConnectionUrlInstance("jdbc:mysql:replication://hostname1,hostname2?dnsSrv=true", props).getClass());
+        assertEquals(ReplicationConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance(
+                "jdbc:mysql:replication://(host=hostname1,type=master)(host=hostname2,type=master)(host=hostname2,type=slave)(host=hostname4,type=slave)?dnsSrv=false",
+                null).getClass());
+        assertEquals(ReplicationConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance(
+                "jdbc:mysql:replication://(host=hostname1,type=master)(host=hostname2,type=master)(host=hostname2,type=slave)(host=hostname4,type=slave)",
+                props).getClass());
+        assertEquals(ReplicationConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance(
+                "jdbc:mysql:replication://(host=hostname1,type=master)(host=hostname2,type=master)(host=hostname2,type=slave)(host=hostname4,type=slave)?dnsArv=false",
+                props).getClass());
+        assertEquals(ReplicationConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance(
+                "jdbc:mysql:replication://(host=hostname1,type=master)(host=hostname2,type=master)(host=hostname2,type=slave)(host=hostname4,type=slave)?dnsSrv=true",
+                props).getClass());
+    }
+
+    /**
+     * Tests mysqlx+srv: connection strings.
+     */
+    @Test
+    public void testMysqlxDnsSrvConnectionUrl() {
+        Properties props;
+        props = new Properties();
+        props.setProperty(PropertyKey.xdevapiDnsSrv.getKeyName(), "true");
+
+        // Host missing.
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx+srv:", null));
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx:?xdevapi.dns-srv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "A host name is required for DNS SRV lookup enabled connections\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx:", props));
+
+        // More than one host.
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname1,hostname2", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname1,hostname2?xdevapi.dns-srv=true", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying multiple host names with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname1,hostname2", props));
+
+        // Port specified.
+        props.setProperty(PropertyKey.PORT.getKeyName(), "12345");
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname:12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=true&port=12345", null));
+        assertThrows(InvalidConnectionAttributeException.class, "Specifying a port number with DNS SRV lookup is not allowed\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname", props));
+        props.remove(PropertyKey.PORT.getKeyName());
+
+        // Conflicting options.
+        props.setProperty(PropertyKey.xdevapiDnsSrv.getKeyName(), "false");
+        assertThrows(InvalidConnectionAttributeException.class, "'xdevapi\\.dns-srv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname?xdevapi.dns-srv=false", null));
+        assertThrows(InvalidConnectionAttributeException.class, "'xdevapi\\.dns-srv' cannot be set to false with DNS SRV lookup enabled\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname", props));
+        props.setProperty(PropertyKey.xdevapiDnsSrv.getKeyName(), "true");
+
+        // Resolving hosts fails.
+        assertThrows(CJException.class, "Unable to locate any hosts for hostname\\.",
+                () -> ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname", null).getHostsList());
+
+        // Correct ConnectionUrl instances - mysqlx+srv:.
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname", null).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname?xdevapi.dns-srv=true", null).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname?xdevapi.dns-srv=true", props).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx+srv://hostname?xdevapi.dns-srv=false", props).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=true", null).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname", props).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=true", props).getClass());
+        assertEquals(XDevApiDnsSrvConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=false", props).getClass());
+
+        // Correct ConnectionUrl instances - mysqlx:.
+        props.setProperty(PropertyKey.xdevapiDnsSrv.getKeyName(), "false");
+        assertEquals(XDevApiConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=false", null).getClass());
+        assertEquals(XDevApiConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname", props).getClass());
+        assertEquals(XDevApiConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=false", props).getClass());
+        assertEquals(XDevApiConnectionUrl.class, ConnectionUrl.getConnectionUrlInstance("mysqlx://hostname?xdevapi.dns-srv=true", props).getClass());
     }
 
     /**

@@ -1,6 +1,24 @@
 # Changelog
 # https://dev.mysql.com/doc/relnotes/connector-j/8.0/en/
 
+Version 8.0.19
+
+  - WL#13346, Support for mult-host and failover.
+
+  - Fix for Bug#97413 (30477722), DATABASEMETADATA IS BROKEN AFTER SERVER WL#13528.
+
+  - WL#13367, DNS SRV support.
+
+  - WL#12736, DevAPI: Specify TLS ciphers to be used by a client or session.
+
+  - Fix for regression tests broken by Bug#97079 fix.
+
+  - Fix for Bug#96383 (30119545) RS.GETTIMESTAMP() HAS DIFFERENT RESULTS FOR TIME FIELDS WITH USECURSORFETCH=TRUE.
+
+  - Fix for Bug#96059 (29999318), ERROR STREAMING MULTI RESULTSETS WITH MYSQL-CONNECTOR-JAVA 8.0.X.
+
+  - Fix for Bug#96442 (30151808), INCORRECT DATE ERROR WHEN CALLING GETMETADATA ON PREPARED STATEMENT.
+
 Version 8.0.18
 
   - WL#13347, Connectors should handle expired password sandbox without SET operations.
