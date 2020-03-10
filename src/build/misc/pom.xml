@@ -6,7 +6,7 @@
   <packaging>jar</packaging>
 
   <name>MySQL Connector/J</name>
-  <description>JDBC Type 4 driver for MySQL</description>
+  <description>JDBC Type 4 driver for MySQL. Custom version with disabled autocommit. Sources: https://github.com/dvponomarev/mysql-connector-j.git</description>
 
   <licenses>
     <license>
