@@ -13,6 +13,12 @@ This is sufficient to build library.
 
 ## Build
 
+Set in `build.properties`:
+```
+com.mysql.cj.build.jdk={jdk 8 path}
+```
+
+Run build:
 ```
 $ ant -version
 Apache Ant(TM) version 1.9.14 compiled on March 12 2019

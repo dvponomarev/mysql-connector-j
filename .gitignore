@@ -5,7 +5,6 @@
 /docs/
 /nbproject/
 /patches/
-/*.properties
 *~
 *.lock
 *.swp
