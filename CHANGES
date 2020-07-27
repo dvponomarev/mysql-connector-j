@@ -1,6 +1,40 @@
 # Changelog
 # https://dev.mysql.com/doc/relnotes/connector-j/8.0/en/
 
+Version 8.0.21
+
+  - WL#14051, Upgrade Protocol Buffers dependency to protobuf-java-3.11.4.
+
+  - WL#14042, Upgrade testsuite to JUnit 5.
+
+  - Fix for Bug#98237 (30911870), PREPAREDSTATEMENT.SETOBJECT(I, "FALSE", TYPES.BOOLEAN) ALWAYS SETS TRUE OR 1.
+
+  - WL#13008, DevAPI: Add schema validation to create collection.
+
+Version 8.0.20
+
+  - Fix for Bug#30805426, IN CASE OF ISAUTHMETHODSWITCHREQUESTPACKET , TOSERVERS > 1 ARE IGNORED.
+
+  - Fix for Bug#97714 (30570249), Contribution: Expose elapsed time for query interceptor to avoid hacky thread local implementations.
+    Thanks to Matti Sillanpää and Johnathan Crawford for their contribution.
+
+  - Fix for Bug#97724 (30570721), Contribution: Allow \'3.\' formatted numbers.
+    Thanks to Nick Pollett for his contribution.
+
+  - Fix for Bug#98536 (30877755), SIMPLEDATEFORMAT COULD CACHE A WRONG CALENDAR.
+
+  - Fix for Bug#91112 (28125069), AGAIN WRONG JAVA.SQL.DATE.
+
+  - Fix for Bug#30474158, CONNECTOR/J 8 DOES NOT HONOR THE REQUESTED RESULTSETTYPE SCROLL_INSENSITIVE ETC.
+
+  - Fix for Bug#98445 (30832513), Connection option clientInfoProvider=ClientInfoProviderSP causes NPE.
+
+  - WL#12248, DevAPI: Connection compression.
+
+  - Fix for Bug#30636056, ResultSetUtil.resultSetToMap() can be unsafe to use.
+
+  - Fix for Bug#97757 (30584907), NULLPOINTEREXCEPTION WITH CACHERESULTSETMETADATA=TRUE AND EXECUTEQUERY OF "SET".
+
 Version 8.0.19
 
   - WL#13346, Support for mult-host and failover.
@@ -35,7 +69,7 @@ Version 8.0.18
 
 Version 8.0.17
 
-  - WL#13210, Generate Javadocs via ant.A
+  - WL#13210, Generate Javadocs via ant.
 
   - WL#12247, DevAPI: indexing array fields.
 

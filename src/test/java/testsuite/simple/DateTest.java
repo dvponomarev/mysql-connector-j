@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2018, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -29,6 +29,11 @@
 
 package testsuite.simple;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
+
 import java.sql.Connection;
 import java.sql.Date;
 import java.sql.PreparedStatement;
@@ -41,6 +46,8 @@ import java.util.Calendar;
 import java.util.Properties;
 import java.util.TimeZone;
 
+import org.junit.jupiter.api.Test;
+
 import com.mysql.cj.conf.PropertyKey;
 import com.mysql.cj.exceptions.MysqlErrorNumbers;
 import com.mysql.cj.util.TimeUtil;
@@ -48,29 +55,7 @@ import com.mysql.cj.util.TimeUtil;
 import testsuite.BaseTestCase;
 
 public class DateTest extends BaseTestCase {
-    /**
-     * Creates a new DateTest object.
-     * 
-     * @param name
-     */
-    public DateTest(String name) {
-        super(name);
-    }
-
-    /**
-     * Runs all test cases in this test suite
-     * 
-     * @param args
-     */
-    public static void main(String[] args) {
-        junit.textui.TestRunner.run(DateTest.class);
-    }
-
-    @Override
-    public void setUp() throws Exception {
-        super.setUp();
-    }
-
+    @Test
     public void testTimestamp() throws SQLException {
         createTable("DATETEST", "(tstamp TIMESTAMP, dt DATE, dtime DATETIME, tm TIME)");
 
@@ -90,7 +75,7 @@ public class DateTest extends BaseTestCase {
         System.out.println(cal);
 
         // DateFormat df = SimpleDateFormat.getInstance();
-        DateFormat df = TimeUtil.getSimpleDateFormat(null, "yyyy/MM/dd HH:mm:ss z", null, null);
+        DateFormat df = TimeUtil.getSimpleDateFormat(null, "yyyy/MM/dd HH:mm:ss z", null);
 
         Calendar calGMT = Calendar.getInstance(TimeZone.getTimeZone("GMT"));
         // df.setTimeZone(TimeZone.getTimeZone("GMT"));
@@ -140,6 +125,7 @@ public class DateTest extends BaseTestCase {
         this.rs = null;
     }
 
+    @Test
     public void testNanosParsing() throws SQLException {
         try {
             this.stmt.executeUpdate("DROP TABLE IF EXISTS testNanosParsing");
@@ -152,15 +138,15 @@ public class DateTest extends BaseTestCase {
             assertTrue(this.rs.next());
             assertTrue(this.rs.getTimestamp(1).getNanos() == 0);
             assertTrue(this.rs.next());
-            assertTrue(this.rs.getTimestamp(1).getNanos() + " != 90", this.rs.getTimestamp(1).getNanos() == 90);
+            assertTrue(this.rs.getTimestamp(1).getNanos() == 90, this.rs.getTimestamp(1).getNanos() + " != 90");
             assertTrue(this.rs.next());
-            assertTrue(this.rs.getTimestamp(1).getNanos() + " != 900", this.rs.getTimestamp(1).getNanos() == 900);
+            assertTrue(this.rs.getTimestamp(1).getNanos() == 900, this.rs.getTimestamp(1).getNanos() + " != 900");
             assertTrue(this.rs.next());
-            assertTrue(this.rs.getTimestamp(1).getNanos() + " != 9000", this.rs.getTimestamp(1).getNanos() == 9000);
+            assertTrue(this.rs.getTimestamp(1).getNanos() == 9000, this.rs.getTimestamp(1).getNanos() + " != 9000");
             assertTrue(this.rs.next());
-            assertTrue(this.rs.getTimestamp(1).getNanos() + " != 90000", this.rs.getTimestamp(1).getNanos() == 90000);
+            assertTrue(this.rs.getTimestamp(1).getNanos() == 90000, this.rs.getTimestamp(1).getNanos() + " != 90000");
             assertTrue(this.rs.next());
-            assertTrue(this.rs.getTimestamp(1).getNanos() + " != 900000", this.rs.getTimestamp(1).getNanos() == 900000);
+            assertTrue(this.rs.getTimestamp(1).getNanos() == 900000, this.rs.getTimestamp(1).getNanos() + " != 900000");
             assertTrue(this.rs.next());
 
             try {
@@ -177,8 +163,8 @@ public class DateTest extends BaseTestCase {
      * Tests the configurability of all-zero date/datetime/timestamp handling in the driver.
      * 
      * @throws Exception
-     *             if the test fails.
      */
+    @Test
     public void testZeroDateBehavior() throws Exception {
         Connection testConn = this.conn;
         Connection roundConn = null;
@@ -209,18 +195,18 @@ public class DateTest extends BaseTestCase {
             this.rs.next();
 
             assertEquals("0001-01-01", this.rs.getDate(1).toString());
-            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(1)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null).format(this.rs.getTimestamp(1)));
             assertEquals("0001-01-01", this.rs.getDate(2).toString());
-            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(2)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null).format(this.rs.getTimestamp(2)));
 
             PreparedStatement roundPrepStmt = roundConn.prepareStatement("SELECT fieldAsString, fieldAsDateTime FROM testZeroDateBehavior");
             this.rs = roundPrepStmt.executeQuery();
             this.rs.next();
 
             assertEquals("0001-01-01", this.rs.getDate(1).toString());
-            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(1)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null).format(this.rs.getTimestamp(1)));
             assertEquals("0001-01-01", this.rs.getDate(2).toString());
-            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null, null).format(this.rs.getTimestamp(2)));
+            assertEquals("0001-01-01 00:00:00.0", TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd HH:mm:ss.0", null).format(this.rs.getTimestamp(2)));
 
             nullConn = getConnectionWithProps("zeroDateTimeBehavior=CONVERT_TO_NULL");
             Statement nullStmt = nullConn.createStatement();
@@ -309,6 +295,7 @@ public class DateTest extends BaseTestCase {
     }
 
     @SuppressWarnings("deprecation")
+    @Test
     public void testReggieBug() throws Exception {
         try {
             this.stmt.executeUpdate("DROP TABLE IF EXISTS testReggieBug");
@@ -329,6 +316,7 @@ public class DateTest extends BaseTestCase {
         }
     }
 
+    @Test
     public void testNativeConversions() throws Exception {
         Timestamp ts = new Timestamp(System.currentTimeMillis());
         Date dt = new Date(ts.getTime());
@@ -361,5 +349,4 @@ public class DateTest extends BaseTestCase {
         System.out.println(this.rs.getTimestamp(3));
         System.out.println(this.rs.getTimestamp(4));
     }
-
 }

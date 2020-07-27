@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -27,24 +27,12 @@
  * 51 Franklin St, Fifth Floor, Boston, MA 02110-1301  USA
  */
 
-package testsuite.simple;
+package com.mysql.cj.protocol.x;
 
-import com.mysql.cj.log.ProfilerEvent;
-import com.mysql.cj.log.StandardLogger;
-
-public class TestBug57662Logger extends StandardLogger {
-
-    public boolean hasNegativeDurations = false;
-
-    public TestBug57662Logger(String name) {
-        super(name, false);
-    }
-
-    @Override
-    protected String logInternal(int level, Object msg, Throwable exception) {
-        if (!this.hasNegativeDurations && msg instanceof ProfilerEvent) {
-            this.hasNegativeDurations = ((ProfilerEvent) msg).getEventDuration() < 0;
-        }
-        return super.logInternal(level, msg, exception);
-    }
+/**
+ * The modes which compression can be made. In message mode, each X Protocol message is compressed independently of the others; in stream mode all messages are
+ * compressed as if they were in a continuous flow of compressed data.
+ */
+public enum CompressionMode {
+    MESSAGE, STREAM;
 }

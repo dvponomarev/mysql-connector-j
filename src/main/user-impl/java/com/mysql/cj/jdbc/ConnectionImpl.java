@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -1480,7 +1480,7 @@ public class ConnectionImpl implements JdbcConnection, SessionEventListener, Ser
             return null;
         }
 
-        Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, getMultiHostSafeProxy().getSession().getServerSession().getDefaultTimeZone(),
+        Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, getMultiHostSafeProxy().getSession().getServerSession().getServerTimeZone(),
                 getMultiHostSafeProxy().getSession().getServerSession().getCapabilities().serverSupportsFracSecs(),
                 getMultiHostSafeProxy().getSession().getServerSession().isServerTruncatesFracSecs(), getExceptionInterceptor());
 
@@ -1492,7 +1492,7 @@ public class ConnectionImpl implements JdbcConnection, SessionEventListener, Ser
     }
 
     private CallableStatement parseCallableStatement(String sql) throws SQLException {
-        Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, getMultiHostSafeProxy().getSession().getServerSession().getDefaultTimeZone(),
+        Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, getMultiHostSafeProxy().getSession().getServerSession().getServerTimeZone(),
                 getMultiHostSafeProxy().getSession().getServerSession().getCapabilities().serverSupportsFracSecs(),
                 getMultiHostSafeProxy().getSession().getServerSession().isServerTruncatesFracSecs(), getExceptionInterceptor());
 
@@ -2578,18 +2578,16 @@ public class ConnectionImpl implements JdbcConnection, SessionEventListener, Ser
                     try {
                         this.infoProvider = (ClientInfoProvider) Util.getInstance(clientInfoProvider, new Class<?>[0], new Object[0],
                                 getExceptionInterceptor());
-                    } catch (CJException ex) {
-                        if (ex.getCause() instanceof ClassCastException) {
+                    } catch (CJException ex1) {
+                        try {
                             // try with package name prepended
-                            try {
-                                this.infoProvider = (ClientInfoProvider) Util.getInstance("com.mysql.cj.jdbc." + clientInfoProvider, new Class<?>[0],
-                                        new Object[0], getExceptionInterceptor());
-                            } catch (CJException e) {
-                                throw SQLExceptionsMapping.translateException(e, getExceptionInterceptor());
-                            }
+                            this.infoProvider = (ClientInfoProvider) Util.getInstance("com.mysql.cj.jdbc." + clientInfoProvider, new Class<?>[0], new Object[0],
+                                    getExceptionInterceptor());
+                        } catch (CJException ex2) {
+                            throw SQLExceptionsMapping.translateException(ex1, getExceptionInterceptor());
                         }
                     }
-                } catch (ClassCastException cce) {
+                } catch (ClassCastException ex) {
                     throw SQLError.createSQLException(Messages.getString("Connection.ClientInfoNotImplemented", new Object[] { clientInfoProvider }),
                             MysqlErrorNumbers.SQL_STATE_ILLEGAL_ARGUMENT, getExceptionInterceptor());
                 }

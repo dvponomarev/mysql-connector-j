@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2017, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2017, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -406,8 +406,10 @@ public class ClientPreparedQueryBindings extends AbstractQueryBindings<ClientPre
     public void setDate(int parameterIndex, Date x, Calendar cal) {
         if (x == null) {
             setNull(parameterIndex);
+        } else if (cal != null) {
+            setValue(parameterIndex, TimeUtil.getSimpleDateFormat("''yyyy-MM-dd''", cal).format(x), MysqlType.DATE);
         } else {
-            this.ddf = TimeUtil.getSimpleDateFormat(this.ddf, "''yyyy-MM-dd''", cal, cal != null ? null : this.session.getServerSession().getDefaultTimeZone());
+            this.ddf = TimeUtil.getSimpleDateFormat(this.ddf, "''yyyy-MM-dd''", this.session.getServerSession().getDefaultTimeZone());
             setValue(parameterIndex, this.ddf.format(x), MysqlType.DATE);
         }
     }
@@ -727,8 +729,10 @@ public class ClientPreparedQueryBindings extends AbstractQueryBindings<ClientPre
     public void setTime(int parameterIndex, Time x, Calendar cal) {
         if (x == null) {
             setNull(parameterIndex);
+        } else if (cal != null) {
+            setValue(parameterIndex, TimeUtil.getSimpleDateFormat("''HH:mm:ss''", cal).format(x), MysqlType.TIME);
         } else {
-            this.tdf = TimeUtil.getSimpleDateFormat(this.tdf, "''HH:mm:ss''", cal, cal != null ? null : this.session.getServerSession().getDefaultTimeZone());
+            this.tdf = TimeUtil.getSimpleDateFormat(this.tdf, "''HH:mm:ss''", this.session.getServerSession().getServerTimeZone());
             setValue(parameterIndex, this.tdf.format(x), MysqlType.TIME);
         }
     }
@@ -782,11 +786,15 @@ public class ClientPreparedQueryBindings extends AbstractQueryBindings<ClientPre
 
             x = TimeUtil.adjustTimestampNanosPrecision(x, fractionalLength, !this.session.getServerSession().isServerTruncatesFracSecs());
 
-            this.tsdf = TimeUtil.getSimpleDateFormat(this.tsdf, "''yyyy-MM-dd HH:mm:ss", targetCalendar,
-                    targetCalendar != null ? null : this.session.getServerSession().getDefaultTimeZone());
-
             StringBuffer buf = new StringBuffer();
-            buf.append(this.tsdf.format(x));
+
+            if (targetCalendar != null) {
+                buf.append(TimeUtil.getSimpleDateFormat("''yyyy-MM-dd HH:mm:ss", targetCalendar).format(x));
+            } else {
+                this.tsdf = TimeUtil.getSimpleDateFormat(this.tsdf, "''yyyy-MM-dd HH:mm:ss", this.session.getServerSession().getServerTimeZone());
+                buf.append(this.tsdf.format(x));
+            }
+
             if (this.session.getServerSession().getCapabilities().serverSupportsFracSecs()) {
                 buf.append('.');
                 buf.append(TimeUtil.formatNanos(x.getNanos(), 6));

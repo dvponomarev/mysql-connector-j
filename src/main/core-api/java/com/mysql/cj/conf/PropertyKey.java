@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2018, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2018, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -78,6 +78,7 @@ public enum PropertyKey {
     blobsAreStrings("blobsAreStrings", true), //
     blobSendChunkSize("blobSendChunkSize", true), //
     cacheCallableStmts("cacheCallableStmts", true), //
+    cacheDefaultTimezone("cacheDefaultTimezone", true), //
     cachePrepStmts("cachePrepStmts", true), //
     cacheResultSetMetadata("cacheResultSetMetadata", true), //
     cacheServerConfiguration("cacheServerConfiguration", true), //
@@ -242,6 +243,8 @@ public enum PropertyKey {
     xdevapiAuth("xdevapi.auth", "xdevapiAuth", true), //
     xdevapiConnectTimeout("xdevapi.connect-timeout", "xdevapiConnectTimeout", true), //
     xdevapiConnectionAttributes("xdevapi.connection-attributes", "xdevapiConnectionAttributes", true), //
+    xdevapiCompression("xdevapi.compression", "xdevapiCompression", true), //
+    xdevapiCompressionAlgorithm("xdevapi.compression-algorithm", "xdevapiCompressionAlgorithm", true), //
     xdevapiDnsSrv("xdevapi.dns-srv", "xdevapiDnsSrv", true), //
     xdevapiSSLMode("xdevapi.ssl-mode", "xdevapiSSLMode", true), //
     xdevapiTlsCiphersuites("xdevapi.tls-ciphersuites", "xdevapiTlsCiphersuites", true), //

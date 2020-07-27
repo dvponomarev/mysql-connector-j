@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -684,7 +684,7 @@ public class StatementImpl implements JdbcStatement {
                 setupStreamingTimeout(locallyScopedConn);
 
                 if (this.doEscapeProcessing) {
-                    Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, this.session.getServerSession().getDefaultTimeZone(),
+                    Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, this.session.getServerSession().getServerTimeZone(),
                             this.session.getServerSession().getCapabilities().serverSupportsFracSecs(),
                             this.session.getServerSession().isServerTruncatesFracSecs(), getExceptionInterceptor());
                     sql = escapedSqlResult instanceof String ? (String) escapedSqlResult : ((EscapeProcessorResult) escapedSqlResult).escapedSql;
@@ -1124,7 +1124,7 @@ public class StatementImpl implements JdbcStatement {
             setupStreamingTimeout(locallyScopedConn);
 
             if (this.doEscapeProcessing) {
-                Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, this.session.getServerSession().getDefaultTimeZone(),
+                Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, this.session.getServerSession().getServerTimeZone(),
                         this.session.getServerSession().getCapabilities().serverSupportsFracSecs(), this.session.getServerSession().isServerTruncatesFracSecs(),
                         getExceptionInterceptor());
                 sql = escapedSqlResult instanceof String ? (String) escapedSqlResult : ((EscapeProcessorResult) escapedSqlResult).escapedSql;
@@ -1262,7 +1262,7 @@ public class StatementImpl implements JdbcStatement {
             ResultSetInternalMethods rs = null;
 
             if (this.doEscapeProcessing) {
-                Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, this.session.getServerSession().getDefaultTimeZone(),
+                Object escapedSqlResult = EscapeProcessor.escapeSQL(sql, this.session.getServerSession().getServerTimeZone(),
                         this.session.getServerSession().getCapabilities().serverSupportsFracSecs(), this.session.getServerSession().isServerTruncatesFracSecs(),
                         getExceptionInterceptor());
                 sql = escapedSqlResult instanceof String ? (String) escapedSqlResult : ((EscapeProcessorResult) escapedSqlResult).escapedSql;
@@ -1933,7 +1933,7 @@ public class StatementImpl implements JdbcStatement {
     }
 
     void setResultSetType(int typeFlag) throws SQLException {
-        Type.fromValue(typeFlag, Type.FORWARD_ONLY);
+        this.query.setResultType(Type.fromValue(typeFlag, Type.FORWARD_ONLY));
     }
 
     protected void getBatchedGeneratedKeys(java.sql.Statement batchedStatement) throws SQLException {
@@ -2235,6 +2235,16 @@ public class StatementImpl implements JdbcStatement {
     @Override
     public void setTimeoutInMillis(int timeoutInMillis) {
         this.query.setTimeoutInMillis(timeoutInMillis);
+    }
+
+    @Override
+    public long getExecuteTime() {
+        return this.query.getExecuteTime();
+    }
+
+    @Override
+    public void setExecuteTime(long executeTime) {
+        this.query.setExecuteTime(executeTime);
     }
 
     @Override

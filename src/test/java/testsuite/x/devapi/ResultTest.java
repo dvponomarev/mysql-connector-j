@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -29,9 +29,9 @@
 
 package testsuite.x.devapi;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import java.sql.Date;
 import java.sql.Time;
@@ -40,9 +40,9 @@ import java.text.SimpleDateFormat;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import com.mysql.cj.exceptions.DataReadException;
 import com.mysql.cj.util.TimeUtil;
@@ -52,12 +52,12 @@ import com.mysql.cj.xdevapi.Table;
 import com.mysql.cj.xdevapi.Warning;
 
 public class ResultTest extends DevApiBaseTestCase {
-    @Before
+    @BeforeEach
     public void setupTableTest() {
         super.setupTestSession();
     }
 
-    @After
+    @AfterEach
     public void teardownTableTest() {
         super.destroyTestSession();
     }
@@ -143,7 +143,7 @@ public class ResultTest extends DevApiBaseTestCase {
         sqlUpdate("drop table if exists testx");
         sqlUpdate("create table testx (w date, x datetime(6), y timestamp(6), z time)");
         Table table = this.schema.getTable("testx");
-        SimpleDateFormat df = TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd'T'HH:mm:ss.S", null, null);
+        SimpleDateFormat df = TimeUtil.getSimpleDateFormat(null, "yyyy-MM-dd'T'HH:mm:ss.S", null);
         java.util.Date theDate = df.parse("2015-09-22T12:31:16.136");
         Date w = new Date(theDate.getTime());
         Timestamp y = new Timestamp(theDate.getTime());

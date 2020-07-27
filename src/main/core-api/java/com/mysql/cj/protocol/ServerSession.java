@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2015, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -141,14 +141,6 @@ public interface ServerSession {
 
     boolean hasLongColumnInfo();
 
-    /**
-     * Does the server send back extra column info?
-     * 
-     * @param hasLongColumnInfo
-     *            flag
-     */
-    void setHasLongColumnInfo(boolean hasLongColumnInfo);
-
     Map<String, String> getServerVariables();
 
     String getServerVariable(String name);
@@ -251,9 +243,7 @@ public interface ServerSession {
      * The default time zone used to marshall date/time values to/from the server. This is used when getDate(), etc methods are called without a calendar
      * argument.
      *
-     * @return The server time zone (which may be user overridden in a connection property)
+     * @return The default JVM time zone
      */
     TimeZone getDefaultTimeZone();
-
-    void setDefaultTimeZone(TimeZone defaultTimeZone);
 }

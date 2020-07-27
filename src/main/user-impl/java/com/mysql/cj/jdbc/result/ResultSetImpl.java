@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002, 2019, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2002, 2020, Oracle and/or its affiliates. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify it under
  * the terms of the GNU General Public License, version 2.0, as published by the
@@ -44,6 +44,7 @@ import java.sql.Array;
 import java.sql.Date;
 import java.sql.NClob;
 import java.sql.Ref;
+import java.sql.ResultSet;
 import java.sql.RowId;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
@@ -193,8 +194,6 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     private ValueFactory<Double> doubleValueFactory;
     private ValueFactory<BigDecimal> bigDecimalValueFactory;
     private ValueFactory<InputStream> binaryStreamValueFactory;
-    // temporal values include the default conn TZ, can be overridden with cal param, e.g. getDate(1, calWithOtherTZ)
-    private ValueFactory<Date> defaultDateValueFactory;
     private ValueFactory<Time> defaultTimeValueFactory;
     private ValueFactory<Timestamp> defaultTimestampValueFactory;
 
@@ -222,6 +221,7 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
         this.owningStatement = creatorStmt;
 
         if (this.connection != null) {
+            this.session = (NativeSession) conn.getSession();
             this.exceptionInterceptor = this.connection.getExceptionInterceptor();
 
             this.padCharsWithSpace = this.connection.getPropertySet().getBooleanProperty(PropertyKey.padCharsWithSpace).getValue();
@@ -267,9 +267,8 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
         this.bigDecimalValueFactory = new BigDecimalValueFactory(pset);
         this.binaryStreamValueFactory = new BinaryStreamValueFactory(pset);
 
-        this.defaultDateValueFactory = new SqlDateValueFactory(pset, null, this.session.getServerSession().getDefaultTimeZone(), this);
-        this.defaultTimeValueFactory = new SqlTimeValueFactory(pset, null, this.session.getServerSession().getDefaultTimeZone(), this);
-        this.defaultTimestampValueFactory = new SqlTimestampValueFactory(pset, null, this.session.getServerSession().getDefaultTimeZone());
+        this.defaultTimeValueFactory = new SqlTimeValueFactory(pset, null, this.session.getServerSession().getServerTimeZone(), this);
+        this.defaultTimestampValueFactory = new SqlTimestampValueFactory(pset, null, this.session.getServerSession().getServerTimeZone());
 
         this.defaultLocalDateValueFactory = new LocalDateValueFactory(pset, this);
         this.defaultLocalTimeValueFactory = new LocalTimeValueFactory(pset, this);
@@ -347,6 +346,9 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public boolean absolute(int row) throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
 
             boolean b;
 
@@ -392,6 +394,9 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public void afterLast() throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
 
             if (this.rowData.size() != 0) {
                 this.rowData.afterLast();
@@ -405,6 +410,9 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public void beforeFirst() throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
 
             if (this.rowData.size() == 0) {
                 return;
@@ -557,6 +565,9 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public boolean first() throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
 
             boolean b = true;
 
@@ -737,16 +748,16 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     public Date getDate(int columnIndex) throws SQLException {
         checkRowPos();
         checkColumnBounds(columnIndex);
-        return this.thisRow.getValue(columnIndex - 1, this.defaultDateValueFactory);
+        return this.thisRow.getValue(columnIndex - 1,
+                new SqlDateValueFactory(this.session.getPropertySet(), null, this.session.getServerSession().getDefaultTimeZone(), this));
     }
 
     @Override
     public Date getDate(int columnIndex, Calendar cal) throws SQLException {
         checkRowPos();
         checkColumnBounds(columnIndex);
-        ValueFactory<Date> vf = new SqlDateValueFactory(this.session.getPropertySet(), cal,
-                cal != null ? cal.getTimeZone() : this.session.getServerSession().getDefaultTimeZone(), this);
-        return this.thisRow.getValue(columnIndex - 1, vf);
+        return this.thisRow.getValue(columnIndex - 1, new SqlDateValueFactory(this.session.getPropertySet(), cal,
+                cal != null ? cal.getTimeZone() : this.session.getServerSession().getDefaultTimeZone(), this));
     }
 
     @Override
@@ -882,7 +893,7 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
         checkRowPos();
         checkColumnBounds(columnIndex);
         ValueFactory<Time> vf = new SqlTimeValueFactory(this.session.getPropertySet(), cal,
-                cal != null ? cal.getTimeZone() : this.session.getServerSession().getDefaultTimeZone());
+                cal != null ? cal.getTimeZone() : this.session.getServerSession().getServerTimeZone());
         return this.thisRow.getValue(columnIndex - 1, vf);
     }
 
@@ -933,7 +944,7 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
         checkRowPos();
         checkColumnBounds(columnIndex);
 
-        TimeZone tz = cal != null ? cal.getTimeZone() : this.session.getServerSession().getDefaultTimeZone();
+        TimeZone tz = cal != null ? cal.getTimeZone() : this.session.getServerSession().getServerTimeZone();
         if (this.customTsVf != null && tz == this.lastTsCustomTz) {
             return this.thisRow.getValue(columnIndex - 1, this.customTsVf);
         }
@@ -1681,6 +1692,9 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public boolean last() throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
 
             boolean b = true;
 
@@ -1784,6 +1798,10 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public boolean previous() throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
+
             return prev();
         }
     }
@@ -1902,6 +1920,9 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
     @Override
     public boolean relative(int rows) throws SQLException {
         synchronized (checkClosed().getConnectionMutex()) {
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY) {
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.ForwardOnly"));
+            }
 
             if (this.rowData.size() == 0) {
                 setRowPositionValidity();
@@ -1939,6 +1960,11 @@ public class ResultSetImpl extends NativeResultset implements ResultSetInternalM
             if ((direction != FETCH_FORWARD) && (direction != FETCH_REVERSE) && (direction != FETCH_UNKNOWN)) {
                 throw SQLError.createSQLException(Messages.getString("ResultSet.Illegal_value_for_fetch_direction_64"),
                         MysqlErrorNumbers.SQL_STATE_ILLEGAL_ARGUMENT, getExceptionInterceptor());
+            }
+
+            if (getType() == ResultSet.TYPE_FORWARD_ONLY && direction != FETCH_FORWARD) {
+                String constName = direction == ResultSet.FETCH_REVERSE ? "ResultSet.FETCH_REVERSE" : "ResultSet.FETCH_UNKNOWN";
+                throw ExceptionFactory.createException(Messages.getString("ResultSet.Unacceptable_value_for_fetch_direction", new Object[] { constName }));
             }
 
             this.fetchDirection = direction;
